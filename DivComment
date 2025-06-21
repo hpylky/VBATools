@@ -1,0 +1,43 @@
+' 区切りコメント作成
+' DevName : 分割名
+' 戻り値  : 作成したコメント
+' Ex. 「＊＊関係」に対して、下記区切りコメントを作成
+' '---------+---------+---------+---------+---------+---------+---------+
+' ' ＊＊関係
+' '---------+---------+---------+---------+---------+---------+---------+
+'
+Public Function 区切りコメント作成(DevName As String) As String
+    Dim s As String
+    
+    s = "'" & StringX("---------+", 7) & vbCrLf ' 区切り線作成
+    区切りコメント作成 = s & "' " & DevName & vbCrLf & _
+                           s & "'" & vbCrLf
+End Function
+
+' 区切りコメント作成
+'
+Public Sub r区切りコメント作成(Optional ByVal control As IRibbonControl)
+    Dim DivName As String
+    
+    ClipBdGetText DivName  ' クリップボードから区切り名を取得
+    ClipBdPutText = 区切りコメント作成(DivName)
+    MsgBox "クリップボードに区切りコメントをコピーしました。"
+End Sub
+
+' String関数の拡張関数(文字列も対応)
+' Num    : 繰り返し数
+' Str    : 対象文字列
+' 戻り値 : StrをNum回繰り返した文字列
+' Ex. Num = 3, Str = "abc"の時
+'     戻り値 = "abcabcabc"
+'
+Public Function StringX(Num As Long, Str As String) As String
+    Dim Output As String
+    Dim i As Long
+
+    If Num <= 0 Then Exit Function  ' 0以下は""を返す
+    For i = 1 To Num
+        Output = Output & Str
+    Next i
+    StringX = Output
+End Function
