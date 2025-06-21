@@ -1,4 +1,4 @@
-' GitHubからファイルをDL
+' GitHubからファイルをダウンロード
 ' fileURL    : GitHubのrawファイルURL（最後の/も付けること）
 ' savePath   : 保存先パス (最後の\も付けること)
 ' FName      : ファイル名
@@ -9,6 +9,8 @@
 '              False = エラー発生 (詳細はHttpStatus, ErrNumを確認)
 ' 参照設定 : Microsoft XML, v6.0 (XMLHTTP60)
 ' 参照設定 : Microsoft ActiveX Data Objects Library (Stream)
+' 補足 : fileURLの記載例
+'   "https://raw.githubusercontent.com/user名/rep名/main/"
 '
 Public Function FileDLFmGitHub(fileURL As String, _
         savePath As String, _
@@ -48,7 +50,7 @@ Public Function FileDLFmGitHub(fileURL As String, _
     Stream.Open
     Stream.Write http.responseBody
     Stream.SaveToFile savePath & FName, 2 ' 2=上書き保存
-    FileDLFmGitHub = True
+    FileDLFmGitHub = True   ' ダウンロード成功
 
 EndProc:
     If Not Stream Is Nothing Then
