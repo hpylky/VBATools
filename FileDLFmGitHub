@@ -1,0 +1,65 @@
+' GitHubからファイルをDL
+' fileURL    : GitHubのrawファイルURL（最後の/も付けること）
+' savePath   : 保存先パス (最後の\も付けること)
+' FName      : ファイル名
+' HttpStatus : HttpStatus番号 (省略可)
+'              200 = OK, 404 = NotFound, 500 = InternalServerErrorなど
+' ErrNum     : Err.Numberの値 (省略可)
+' 戻り値     : True  = 正常終了
+'              False = エラー発生 (詳細はHttpStatus, ErrNumを確認)
+' 参照設定 : Microsoft XML, v6.0 (XMLHTTP60)
+' 参照設定 : Microsoft ActiveX Data Objects Library (Stream)
+'
+Public Function FileDLFmGitHub(fileURL As String, _
+        savePath As String, _
+        FName As String, _
+        Optional ByRef HttpStatus As Long, _
+        Optional ByRef ErrNum As Long) As Boolean
+#If DEBUGMode Then
+    ' 前処理 (引数チェック)
+    If Right(fileURL, 1) <> "/" Then
+        MsgBox "fileURLの末尾が/ではありません。"
+        Stop: End
+    End If
+    If Right(savePath, 1) <> "\" Then
+        MsgBox "savePathの末尾が\ではありません。"
+        Stop: End
+    End If
+#End If
+    ' メイン処理
+    On Error GoTo ErrProc
+    Dim http As MSXML2.XMLHTTP60
+    Dim Stream As ADODB.Stream
+    
+    HttpStatus = 0
+    ErrNum = 0
+    
+    ' HTTPリクエストオブジェクト作成
+    Set http = New MSXML2.XMLHTTP60
+    http.Open "GET", fileURL & FName, False
+    http.Send
+    
+    HttpStatus = http.Status
+    If HttpStatus <> 200 Then GoTo EndProc
+        
+    ' ADODB.Streamで保存
+    Set Stream = New ADODB.Stream
+    Stream.Type = 1 ' バイナリ
+    Stream.Open
+    Stream.Write http.responseBody
+    Stream.SaveToFile savePath & FName, 2 ' 2=上書き保存
+    FileDLFmGitHub = True
+
+EndProc:
+    If Not Stream Is Nothing Then
+        If Stream.State = 1 Then Stream.Close
+        Set Stream = Nothing
+    End If
+    If Not http Is Nothing Then http.abort  'レスポンス中のキャンセル時処理
+    Set http = Nothing
+    Exit Function
+
+ErrProc:
+    ErrNum = Err.Number
+    GoTo EndProc
+End Function
