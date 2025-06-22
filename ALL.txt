@@ -146,3 +146,20 @@ ErrProc:
     ErrNum = Err.Number
     GoTo EndProc
 End Function
+
+Private Sub FileDLFmGitHub_Test()
+    Dim fileURL As String
+    Dim savePath As String
+    Dim FName As String
+    Dim SrcTbl As Variant
+    Dim HttpStatus As Long, ErrNum As Long
+    Dim i As Long, j As Long, s As String, t As String
+    Dim b1 As Boolean
+
+    fileURL = "https://raw.githubusercontent.com/hpylky/VBATools/main/"
+    savePath = "C:\Users\ykara\Desktop\新しいフォルダー\"
+    FName = "ALL.txt"
+    Stop
+    b1 = FileDLFmGitHub(fileURL, savePath, FName, HttpStatus, ErrNum)
+    Stop
+End Sub
