@@ -1,0 +1,67 @@
+' LibWinAPI
+'
+Option Explicit
+
+'---------+---------+---------+---------+---------+---------+---------+
+' Window操作関係
+'---------+---------+---------+---------+---------+---------+---------+
+
+' Windows API宣言
+Private Declare PtrSafe Function EnumWindows Lib "user32" (ByVal lpEnumFunc As LongPtr, ByVal lParam As LongPtr) As Long
+Private Declare PtrSafe Function GetWindowThreadProcessId Lib "user32" (ByVal hWnd As LongPtr, lpdwProcessId As Long) As Long
+Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+
+' グローバル変数（EnumWindowsのコールバック用）
+Private hFindWnd As LongPtr
+Private targetPID As LongPtr
+
+' アプリ起動時のプロセスID(PID)からウインドウハンドル(hWnd)を取得
+' PID    : プロセスID
+' 戻り値 : ウインドウハンドル
+'          = 0 タイムアウトエラー or 見つからず
+'          <> 0 正常終了
+' 補足 :
+' ・Shell関数でアプリ起動時に戻り値としてPIDが帰ってくるが、
+'   それを元にhWndを取得
+' ・ウインドウハンドルが見つからない場合は、1秒待って再度検索
+' 　を行う。30秒経過しても見つからない場合は0を返して終了。
+'
+Public Function hWndGetFromPID(PID As Long) As Long
+    Dim i As Long
+    
+    Const TIMEOUT As Long = 30  ' 最大30秒
+    
+    targetPID = PID
+    For i = 1 To TIMEOUT
+        hFindWnd = 0
+        EnumWindows AddressOf EnumWindowsProc, 0
+        If hFindWnd <> 0 Then
+            hWndGetFromPID = hFindWnd
+            Exit Function
+        End If
+        Sleep 1000 ' 1秒待つ
+        DoEvents
+    Next i
+End Function
+
+' EnumWindowsのコールバック関数
+' hWnd   : ウインドウハンドル
+' lParam : 未使用（EnumWindowsから渡される追加引数）
+' hFindWnd : 見つかったウインドウハンドル
+'           (広域変数, 戻り値)
+' 戻り値 : 0 = 見つかった
+'          1 = 続行
+'
+Private Function EnumWindowsProc( _
+        ByVal hWnd As LongPtr, _
+        ByVal lParam As LongPtr) As Long
+    Dim PID As LongPtr
+    
+    GetWindowThreadProcessId hWnd, PID
+    If PID = targetPID Then
+        hFindWnd = hWnd
+        EnumWindowsProc = 0  ' 見つかった
+    Else
+        EnumWindowsProc = 1  ' 続行
+    End If
+End Function
