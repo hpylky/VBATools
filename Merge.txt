@@ -384,3 +384,69 @@ If hwnd <> 0 Then
 Else
     Debug.Print "ウィンドウハンドル取得失敗"
 End If
+
+<Llama>
+Public Function hWndGetFromPID(PID As Long) As Long
+    Const TIMEOUT_SEC As Long = 30 ' 30秒まで待つ
+    Dim hWnd As Long
+    Dim startTime As Single
+    Dim elapsedTime As Single
+    
+    startTime = Timer
+    Do
+        ' 1秒待って再度検索
+        DoEvents
+        Application.Wait (Now + TimeValue("0:00:1"))
+        hWnd = FindWindowEx(0&, 0&, "", PID)
+        If hWnd <> 0 Then
+            ' ウインドウハンドルが見つかったので、すぐに終了
+            Exit Do
+        End If
+    Loop While Timer - startTime < TIMEOUT_SEC
+    
+    ' ウインドウハンドルが見つからなかったら0を返す
+    hWndGetFromPID = 0
+End Function
+
+<Copilot>
+Private Declare PtrSafe Function EnumWindows Lib "user32" _
+    (ByVal lpEnumFunc As LongPtr, ByVal lParam As LongPtr) As Long
+
+Private Declare PtrSafe Function GetWindowThreadProcessId Lib "user32" _
+    (ByVal hWnd As LongPtr, lpdwProcessId As Long) As Long
+
+Private Declare PtrSafe Function IsWindowVisible Lib "user32" _
+    (ByVal hWnd As LongPtr) As Long
+
+Private hWndResult As LongPtr
+
+Private Function EnumWindowsProc(ByVal hWnd As LongPtr, ByVal lParam As LongPtr) As Long
+    Dim pidTest As Long
+    GetWindowThreadProcessId hWnd, pidTest
+    If pidTest = lParam Then
+        If IsWindowVisible(hWnd) Then
+            hWndResult = hWnd
+            EnumWindowsProc = 0 ' stop enumeration
+            Exit Function
+        End If
+    End If
+    EnumWindowsProc = 1 ' continue enumeration
+End Function
+
+Public Function hWndGetFromPID(PID As Long) As Long
+    Dim startTime As Single
+    startTime = Timer
+
+    Do While Timer - startTime < 30
+        hWndResult = 0
+        EnumWindows AddressOf EnumWindowsProc, PID
+        If hWndResult <> 0 Then
+            hWndGetFromPID = hWndResult
+            Exit Function
+        End If
+        DoEvents
+        Application.Wait Now + TimeValue("0:00:01")
+    Loop
+
+    hWndGetFromPID = 0 ' Timeout or not found
+End Function
