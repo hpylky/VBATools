@@ -1,0 +1,67 @@
+' １次元文字列配列を昇順でマージソート(通常比較版)
+' Arr　: ソートする１次元配列
+' low  : ソート開始の要素番号
+' high : ソート終了の要素番号
+' 注：配列内の要素はVariant型
+'     比較は通常の<, >を使用(大文字・小文字の区別なし)
+'
+Public Sub SortMergeAsc1D(ByRef arr As Variant, _
+        ByVal low As Long, ByVal high As Long)
+
+    If low < high Then
+        Dim mid As Long
+        mid = (low + high) \ 2
+        
+        ' 左側をソート
+        Call SortMergeAsc1D(arr, low, mid)
+        ' 右側をソート
+        Call SortMergeAsc1D(arr, mid + 1, high)
+        ' マージ
+        Call Merge(arr, low, mid, high)
+    End If
+
+End Sub
+
+' マージ処理用のサブルーチン
+Private Sub Merge(ByRef arr As Variant, _
+                  ByVal low As Long, ByVal mid As Long, ByVal high As Long)
+    Dim temp() As Variant
+    Dim i As Long, j As Long, k As Long
+    Dim n As Long
+    n = high - low + 1
+    ReDim temp(1 To n)
+    
+    i = low
+    j = mid + 1
+    k = 1
+    
+    Do While i <= mid And j <= high
+        ' 比較は通常の<, >を使用し、文字列なら大文字小文字区別なし
+        If StrComp(arr(i), arr(j), vbTextCompare) <= 0 Then
+            temp(k) = arr(i)
+            i = i + 1
+        Else
+            temp(k) = arr(j)
+            j = j + 1
+        End If
+        k = k + 1
+    Loop
+    
+    ' 残りをコピー
+    Do While i <= mid
+        temp(k) = arr(i)
+        i = i + 1
+        k = k + 1
+    Loop
+    Do While j <= high
+        temp(k) = arr(j)
+        j = j + 1
+        k = k + 1
+    Loop
+
+    ' 戻す
+    For k = 1 To n
+        arr(low + k - 1) = temp(k)
+    Next k
+End Sub
+
