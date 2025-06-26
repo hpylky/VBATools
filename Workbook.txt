@@ -1,0 +1,36 @@
+' ワークブックが開いているか確認
+' FileName : フルパスのファイル名
+' mode     : 1 = Workbookのみ (既定値)
+'            2 = Workbook + AddIn
+' 戻り値   : 該当するWorkbookオブジェクト
+'            Nothing : 見つからず
+'
+Public Function IsWBOpen(fileName As String, _
+        Optional mode As Long = 1) As Workbook
+    Dim WB As Workbook
+    Dim AI As AddIn
+    Dim s As String
+    
+    'モード1: 通常のワークブックのみをチェック
+    For Each WB In Workbooks
+        s = ConvODPath(WB.FullName) ' OneDrive内のパスをローカルパスに変換
+        If LCase(s) = LCase(fileName) Then
+            Set IsWBOpen = WB
+            Exit Function
+        End If
+    Next WB
+
+    'モード2: アドインもチェック
+    If mode <> 2 Then GoTo EndProc
+    For Each AI In AddIns
+        s = ConvODPath(AI.FullName) ' OneDrive内のパスをローカルパスに変換
+        If LCase(s) = LCase(fileName) Then
+            On Error Resume Next ' アドインが非表示の場合のエラーを無視
+            Set IsWBOpen = Workbooks(AI.Name)
+            On Error GoTo 0
+            If Not IsWBOpen Is Nothing Then Exit Function
+        End If
+    Next AI
+EndProc:
+    Set IsWBOpen = Nothing
+End Function
