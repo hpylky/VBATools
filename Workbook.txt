@@ -34,3 +34,5 @@ Public Function IsWBOpen(fileName As String, _
 EndProc:
     Set IsWBOpen = Nothing
 End Function
+
+FormListMakeYkaraDispArea の戻り値がStringの確認
