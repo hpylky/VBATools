@@ -1,169 +1,41 @@
-' ワークブックが開いているか確認
+' ワークブック(Excel)を開く
+' 既に開かれている場合は、WBオブジェクトを返す。
+'
 ' FileName : フルパスのファイル名
-' mode     : 1 = Workbookのみ (既定値)
-'            2 = Workbook + AddIn
-' 戻り値   : 該当するWorkbookオブジェクト
-'            Nothing : 見つからず
+' Retval   : 0 = 正常終了(ファイルを開いてWBオブジェクトを返す)
+'            1 = 正常終了(既に開いているWBオブジェクトを返す)
+'            3 = ファイルなし (Nothing返す)
+'            4 = ファルダなし (Nothing返す)
+'            Other = Err.Number
+' 戻り値   : 開いたWorkbookオブジェクト
+'            Nothing = 見つからず'
+' 参照設定 : Microsoft Scripting Runtime
 '
-Public Function IsWBOpen(fileName As String, _
-        Optional mode As Long = 1) As Workbook
-    Dim WB As Workbook
-    Dim AI As AddIn
+Public Function WBOpenX(FPName As String, ByRef Retval As Long) As Workbook
+    On Error GoTo ErrProc
+    Dim FSO As FileSystemObject
     Dim s As String
+
+    Set FSO = New FileSystemObject
+
+    ' フォルダの存在チェック
+    s = FSO.GetParentFolderName(FPName)
+    If Not FSO.FolderExists(s) Then Retval = 4: GoTo EndProc
+
+    ' ファイルの存在チェック
+    If Not FSO.FileExists(FPName) Then Retval = 3: GoTo EndProc
     
-    'モード1: 通常のワークブックのみをチェック
-    For Each WB In Workbooks
-        s = ConvODPath(WB.FullName) ' OneDrive内のパスをローカルパスに変換
-        If LCase(s) = LCase(fileName) Then
-            Set IsWBOpen = WB
-            Exit Function
-        End If
-    Next WB
-
-    'モード2: アドインもチェック
-    If mode <> 2 Then GoTo EndProc
-    For Each AI In AddIns
-        s = ConvODPath(AI.FullName) ' OneDrive内のパスをローカルパスに変換
-        If LCase(s) = LCase(fileName) Then
-            On Error Resume Next ' アドインが非表示の場合のエラーを無視
-            Set IsWBOpen = Workbooks(AI.Name)
-            On Error GoTo 0
-            If Not IsWBOpen Is Nothing Then Exit Function
-        End If
-    Next AI
-EndProc:
-    Set IsWBOpen = Nothing
-End Function
-
-Option Explicit
-
-#If VBA7 Then
-    ' iniファイル読込み(API関数)
-    Private Declare PtrSafe Function GetPrivateProfileStringA _
-        Lib "kernel32" ( _
-        ByVal lpApplicationName As String, _
-        ByVal lpKeyName As Any, _
-        ByVal lpDefault As String, _
-        ByVal lpReturnedString As String, _
-        ByVal nSize As Long, _
-        ByVal lpFileName As String) As Long
-
-    ' iniファイル書き込み(API関数)
-    Private Declare PtrSafe Function WritePrivateProfileStringA _
-        Lib "kernel32" ( _
-        ByVal lpApplicationName As String, _
-        ByVal lpKeyName As Any, _
-        ByVal lpString As Any, _
-        ByVal lpFileName As String) As Long
-#Else
-    ' iniファイル読込み(API関数)
-    Private Declare Function GetPrivateProfileStringA _
-        Lib "kernel32" ( _
-        ByVal lpApplicationName As String, _
-        ByVal lpKeyName As Any, _
-        ByVal lpDefault As String, _
-        ByVal lpReturnedString As String, _
-        ByVal nSize As Long, _
-        ByVal lpFileName As String) As Long
-
-    ' iniファイル書き込み(API関数)
-    Private Declare Function WritePrivateProfileStringA _
-        Lib "kernel32" ( _
-        ByVal lpApplicationName As String, _
-        ByVal lpKeyName As Any, _
-        ByVal lpString As Any, _
-        ByVal lpFileName As String) As Long
-#End If
-
-' INIファイルの構造は下記の通り
-'
-' <c:\path\test.ini>    INIファイル名
-' [APPNAME]    　       アプリケーション名
-' KEYNAME=KEY値　       キー名、キー値
-'
-
-' INIファイルからの読み込み
-'
-' INIFileName : INIファイル名(パス名含む)
-' AppName     : アプリケーション名
-' KeyName     : キー名
-' Default     : デフォルト値
-' ErrMsg      : エラーメッセージ
-'
-' 戻り値
-' KeyVal    : キー値 (読み込んだ結果の値)
-' ErrMSG    : エラーメッセージ
-'             ""の場合は、読み込みエラー(INIファイルなし)
-' GetINIStr : True=正常終了、False=異常終了
-'
-Public Function GetINIStr(INIFileName As String, _
-                          AppName As String, _
-                          KeyName As String, _
-                          ByRef KeyVal As String, _
-                          ErrMsg As String) As Boolean
-    Dim Val As String          ' テキストバッファ(最大256文字)
-    Dim StrLen As Long              ' 文字列長
-    Dim RetVal As Long              ' 戻り値
-
-    GetINIStr = False
-    KeyVal = ""
-    ErrMsg = ""
-    Val = String(256, Chr(0))
-    
-    On Error Resume Next
-    ' INIファイルから文字列を読み出す(API利用)
-    ' 戻り値(ReVal)は、バッファに格納された文字数。
-    RetVal = GetPrivateProfileString( _
-        AppName, KeyName, "", Val, Len(Val), INIFileName)
-
-    ' エラー判定
-    If Err.Number <> 0 Then
-        ErrMsg = Err.Description
-    ElseIf RetVal > 0 Then  ' 成功の場合
-        KeyVal = Trim$(Left$(Val, RetVal))
-        GetINIStr = True
-    End If
-    On Error GoTo 0
-End Function
-
-' INIファイルへの書き込み
-'
-' INIFileName : INIファイル名(パス名含む)
-' AppName     : アプリケーション名
-' KeyName     : キー名
-' KeyVal      : キー値 (書き込む値)
-'
-' 戻り値
-' SetINIStr : True=正常終了、False=異常終了
-'             Falseの場合は、エラーメッセージを表示。
-'
-Public Function SetINIStr(INIFileName As String, _
-                          AppName As String, _
-                          KeyName As String, _
-                          KeyVal As String, _
-                          ErrMsg As String) As Boolean
-    Dim RetVal As Long              ' 戻り値
-    
-    SetINIStr = False
-    
-    On Error Resume Next
-    ' iniファイル書き込みを行なう(API利用)
-    ' 戻り値(ReVal)は、0以外は正常読込。
-    RetVal = WritePrivateProfileString(AppName, KeyName, KeyVal, INIFileName)
-    
-    ' エラー判定
-    If Err.Number <> 0 Then
-        ErrMsg = Err.Description
-    ElseIf RetVal <> 0 Then      ' 成功の場合
-        SetINIStr = True
+    Set WBOpenX = IsWBOpen(FPName, 2)   ' 既に開かれているかチェック
+    If Not WBOpenX Is Nothing Then
+        Retval = 1  ' 既に開いていた
     Else
-        ErrMsg = ""
+        Set WBOpenX = Workbooks.Open(FPName)    ' ファイルを開く
     End If
-    On Error GoTo 0
+EndProc:
+    Set FSO = Nothing
+    Exit Function
+
+ErrProc:
+    Retval = Err.Number
+    GoTo EndProc
 End Function
-
-
-FormListMakeYkaraDispArea の戻り値がStringの確認
-TimeWaitのLib場所　Other？
-ArryConv1DToStr SrcTbl, Str ?
-
