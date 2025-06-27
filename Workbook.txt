@@ -39,3 +39,69 @@ ErrProc:
     Retval = Err.Number
     GoTo EndProc
 End Function
+
+' ワークブックが開いているか確認
+' FPName : フルパスのファイル名
+' mode     : 1 = Workbookのみ (既定値)
+'            2 = Workbook + AddIn
+' 戻り値   : 該当するWorkbookオブジェクト
+'            Nothing : 見つからず
+'
+Public Function IsWBOpen(FPName As String, _
+        Optional mode As Long = 1) As Workbook
+    Dim WB As Workbook
+    Dim AI As AddIn
+    Dim s As String
+    
+    'モード1: 通常のワークブックのみをチェック
+    For Each WB In Workbooks
+'        s = ConvODPath(WB.FullName) ' OneDrive内のパスをローカルパスに変換
+'        If LCase(s) = LCase(FPName) Then
+        If LCase(WB.FullName) = LCase(FPName) Then
+            Set IsWBOpen = WB
+            Exit Function
+        End If
+    Next WB
+
+    'モード2: アドインもチェック
+    If mode <> 2 Then GoTo EndProc
+    For Each AI In AddIns
+'        s = ConvODPath(AI.FullName) ' OneDrive内のパスをローカルパスに変換
+'        If LCase(s) = LCase(FPName) Then
+        If LCase(AI.FullName) = LCase(FPName) Then
+            On Error Resume Next ' アドインが非表示の場合のエラーを無視
+            Set IsWBOpen = Workbooks(AI.Name)
+            On Error GoTo 0
+            If Not IsWBOpen Is Nothing Then Exit Function
+        End If
+    Next AI
+EndProc:
+    Set IsWBOpen = Nothing
+End Function
+
+' 新規Workbookを作成 (表示・非表示設定付)
+' Visible : True  = Workbookを表示で作成 (既定値)
+'           False = Workbookを非表示で作成
+' 戻り値  : 作成した新規WBオブジェクト
+'           Nothing = エラー発生
+' 参照設定:Microsoft Excel xx.x Object Library
+' 注：既存のExcelインスタンスがあれば、それに対して、
+'     Workbookを作成。なければ新しいインスタンスを作成。
+'
+Public Function WBOpenNew(Optional Visible As Boolean = True) As Workbook
+    Dim xlApp As Excel.Application
+    Dim xlWB As Excel.Workbook
+    
+    On Error Resume Next
+    Set xlApp = GetObject(, "Excel.Application")
+    If Err.Number <> 0 Then
+        Err.Clear
+        Set xlApp = New Excel.Application
+    End If
+    xlApp.Visible = Visible
+    
+    On Error GoTo EndProc
+    Set xlWB = xlApp.Workbooks.Add
+    Set WBOpenNew = xlWB
+EndProc:
+End Function
