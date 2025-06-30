@@ -1,0 +1,39 @@
+
+
+
+
+Sub MakePivotTable()
+    Dim pvc As PivotCache, pvt As PivotTable
+    Dim rng As Variant
+    
+    Set rng = Worksheets("データ").Cells(1, 1).CurrentRegion
+    Set pvc = ActiveWorkbook.PivotCaches.Create(xlDatabase, rng, 6)
+    Set pvt = pvc.CreatePivotTable(Cells(3, 1), "ピボットテーブル名", , 6)
+
+    With pvt
+    .AddDataField .PivotFields("価格"), "合計 / 価格", xlSum
+    .PivotFields("商品").Orientation = xlColumnField
+    .PivotFields("地方").Orientation = xlRowField
+    .PivotFields("名前").Orientation = xlRowField
+    End With
+
+    Set pvt = Nothing
+    Set pvc = Nothing
+    Set rng = Nothing
+End Sub
+
+
+「データ」シートに下記データを入れる
+「テーブル」シートにピポットテーブルを作成
+
+名前    商品    地方    価格
+佐藤    洗濯機  東京    10000
+鈴木    冷蔵庫  大阪    13000
+田中    洗濯機  東京    17000
+伊東    冷蔵庫  大阪    15000
+渡辺    洗濯機  東京    11000
+高橋    洗濯機  東京    14000
+中村    冷蔵庫  大阪    19000
+新井    冷蔵庫  大阪    18000
+加藤    洗濯機  東京    20000
+
