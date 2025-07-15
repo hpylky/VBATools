@@ -1,107 +1,329 @@
-' ワークブック(Excel)を開く
-' 既に開かれている場合は、WBオブジェクトを返す。
+' 線形検索で2次元配列を行方向に検索
+' SrcTbl : 2次元配列 (基底1)
+' FVal   : 検索値
+' CPos   : 検索する列位置(横に検索)
+' Soff   : 検索開始位置（行位置）
+'          -1 = 先頭 or 最後から (既定値)
+'          -1 <> 指定の位置から
+' Dirc   : 1  = 前方検索 (既定値)
+'          -1 = 後方検索
+' 戻り値 : -1 <> 見つかった位置（行番号）
+'          -1 = 見つからず
+' Emptyも""として検索
 '
-' FileName : フルパスのファイル名
-' Retval   : 0 = 正常終了(ファイルを開いてWBオブジェクトを返す)
-'            1 = 正常終了(既に開いているWBオブジェクトを返す)
-'            3 = ファイルなし (Nothing返す)
-'            4 = ファルダなし (Nothing返す)
-'            Other = Err.Number
-' 戻り値   : 開いたWorkbookオブジェクト
-'            Nothing = 見つからず'
-' 参照設定 : Microsoft Scripting Runtime
-'
-Public Function WBOpenX(FPName As String, ByRef Retval As Long) As Workbook
-    On Error GoTo ErrProc
-    Dim FSO As FileSystemObject
-    Dim s As String
-
-    Set FSO = New FileSystemObject
-
-    ' フォルダの存在チェック
-    s = FSO.GetParentFolderName(FPName)
-    If Not FSO.FolderExists(s) Then Retval = 4: GoTo EndProc
-
-    ' ファイルの存在チェック
-    If Not FSO.FileExists(FPName) Then Retval = 3: GoTo EndProc
-    
-    Set WBOpenX = IsWBOpen(FPName, 2)   ' 既に開かれているかチェック
-    If Not WBOpenX Is Nothing Then
-        Retval = 1  ' 既に開いていた
-    Else
-        Set WBOpenX = Workbooks.Open(FPName)    ' ファイルを開く
+Public Function SrchLinearRow2D(SrcTbl As Variant, _
+        FVal As Variant, _
+        Optional CPos As Long = 1, _
+        Optional Soff As Long = -1, _
+        Optional Dirc As Long = 1) As Long
+#If DEBUGMode Then
+    ' 前処理（引数チェック）
+    If ArrayDim(SrcTbl) <> 2 Then
+        MsgBox "SrcTblが2次元配列ではありません。"
+        Stop: End
     End If
-EndProc:
-    Set FSO = Nothing
-    Exit Function
+    If ArrayBASE2D(SrcTbl) <> 1 Then
+        MsgBox "SrcTblの基底が1ではありません。"
+        Stop: End
+    End If
+    If CPos < LBound(SrcTbl, 2) Or CPos > UBound(SrcTbl, 2) Then
+        MsgBox "CPosが不正値です。"
+        Stop: End
+    End If
+    If Soff <> -1 Then
+        If Soff < LBound(SrcTbl, 1) Or Soff > UBound(SrcTbl, 1) Then
+            MsgBox "Soffが不正値です。"
+            Stop: End
+        End If
+    End If
+    If Dirc <> 1 And Dirc <> -1 Then
+        MsgBox "Dircが不正値です。"
+        Stop: End
+    End If
+#End If
+    ' メイン処理
+    Dim SPos As Long, EPos As Long
+    Dim i As Long
 
-ErrProc:
-    Retval = Err.Number
-    GoTo EndProc
-End Function
+    ' 検索開始位置の決定
+    If Soff = -1 Then
+        If Dirc = 1 Then
+            SPos = LBound(SrcTbl, 1)
+        Else
+            SPos = UBound(SrcTbl, 1)
+        End If
+    Else
+        SPos = Soff
+    End If
 
-' ワークブックが開いているか確認
-' FPName : フルパスのファイル名
-' mode     : 1 = Workbookのみ (既定値)
-'            2 = Workbook + AddIn
-' 戻り値   : 該当するWorkbookオブジェクト
-'            Nothing : 見つからず
-'
-Public Function IsWBOpen(FPName As String, _
-        Optional mode As Long = 1) As Workbook
-    Dim WB As Workbook
-    Dim AI As AddIn
-    Dim s As String
-    
-    'モード1: 通常のワークブックのみをチェック
-    For Each WB In Workbooks
-'        s = ConvODPath(WB.FullName) ' OneDrive内のパスをローカルパスに変換
-'        If LCase(s) = LCase(FPName) Then
-        If LCase(WB.FullName) = LCase(FPName) Then
-            Set IsWBOpen = WB
+    ' 検索終了位置の決定
+    If Dirc = 1 Then
+        EPos = UBound(SrcTbl, 1)
+    Else
+        EPos = LBound(SrcTbl, 1)
+    End If
+
+    ' 線形検索の実行
+    For i = SPos To EPos Step Dirc
+        If SrcTbl(i, CPos) = FVal Then
+            SrchLinearRow2D = i ' 見つかった行番号を返す
             Exit Function
         End If
-    Next WB
-
-    'モード2: アドインもチェック
-    If mode <> 2 Then GoTo EndProc
-    For Each AI In AddIns
-'        s = ConvODPath(AI.FullName) ' OneDrive内のパスをローカルパスに変換
-'        If LCase(s) = LCase(FPName) Then
-        If LCase(AI.FullName) = LCase(FPName) Then
-            On Error Resume Next ' アドインが非表示の場合のエラーを無視
-            Set IsWBOpen = Workbooks(AI.Name)
-            On Error GoTo 0
-            If Not IsWBOpen Is Nothing Then Exit Function
-        End If
-    Next AI
-EndProc:
-    Set IsWBOpen = Nothing
+    Next i
+    SrchLinearRow2D = -1    ' 見つからず
 End Function
 
-' 新規Workbookを作成 (表示・非表示設定付)
-' Visible : True  = Workbookを表示で作成 (既定値)
-'           False = Workbookを非表示で作成
-' 戻り値  : 作成した新規WBオブジェクト
-'           Nothing = エラー発生
-' 参照設定:Microsoft Excel xx.x Object Library
-' 注：既存のExcelインスタンスがあれば、それに対して、
-'     Workbookを作成。なければ新しいインスタンスを作成。
+' 線形検索で2次元配列を列方向に検索
+' SrcTbl : 2次元配列 (基底1)
+' FVal   : 検索値
+' RPos   : 検索する行位置(縦に検索)
+' Soff   : 検索開始位置（列位置）
+'          -1 = 先頭 or 最後から (既定値)
+'          -1 <> 指定の位置から
+' Dirc   : 1  = 前方検索 (既定値)
+'          -1 = 後方検索
+' 戻り値 : -1 <> 見つかった位置（列番号）
+'          -1 = 見つからず
+' Emptyも""として検索
 '
-Public Function WBOpenNew(Optional Visible As Boolean = True) As Workbook
-    Dim xlApp As Excel.Application
-    Dim xlWB As Excel.Workbook
-    
-    On Error Resume Next
-    Set xlApp = GetObject(, "Excel.Application")
-    If Err.Number <> 0 Then
-        Err.Clear
-        Set xlApp = New Excel.Application
+Public Function SrchLinearCol2D(SrcTbl As Variant, _
+        FVal As Variant, _
+        Optional RPos As Long = 1, _
+        Optional Soff As Long = -1, _
+        Optional Dirc As Long = 1) As Long
+#If DEBUGMode Then
+    ' 前処理（引数チェック）
+    If ArrayDim(SrcTbl) <> 2 Then
+        MsgBox "SrcTblが2次元配列ではありません。"
+        Stop: End
     End If
-    xlApp.Visible = Visible
-    
-    On Error GoTo EndProc
-    Set xlWB = xlApp.Workbooks.Add
-    Set WBOpenNew = xlWB
-EndProc:
+    If ArrayBASE2D(SrcTbl) <> 1 Then
+        MsgBox "SrcTblの基底が1ではありません。"
+        Stop: End
+    End If
+    If RPos < LBound(SrcTbl, 1) Or RPos > UBound(SrcTbl, 1) Then
+        MsgBox "RPosが不正値です。"
+        Stop: End
+    End If
+    If Soff <> -1 Then
+        If Soff < LBound(SrcTbl, 2) Or Soff > UBound(SrcTbl, 2) Then
+            MsgBox "Soffが不正値です。"
+            Stop: End
+        End If
+    End If
+    If Dirc <> 1 And Dirc <> -1 Then
+        MsgBox "Dircが不正値です。"
+        Stop: End
+    End If
+#End If
+    ' メイン処理
+    Dim SPos As Long, EPos As Long
+    Dim i As Long
+
+    ' 検索開始位置の決定
+    If Soff = -1 Then
+        If Dirc = 1 Then
+            SPos = LBound(SrcTbl, 2)
+        Else
+            SPos = UBound(SrcTbl, 2)
+        End If
+    Else
+        SPos = Soff
+    End If
+
+    ' 検索終了位置の決定
+    If Dirc = 1 Then
+        EPos = UBound(SrcTbl, 2)
+    Else
+        EPos = LBound(SrcTbl, 2)
+    End If
+
+    ' 線形検索の実行
+    For i = SPos To EPos Step Dirc
+        If SrcTbl(RPos, i) = FVal Then
+            SrchLinearCol2D = i ' 見つかった列番号を返す
+            Exit Function
+        End If
+    Next i
+    SrchLinearCol2D = -1    ' 見つからず
 End Function
+
+' Err.Numberから対応するErr.Descriptionを求める
+' ErrNum : エラー番号(Err.Numberの値)
+' 戻り値 : Err.Numberに対応したErr.Descriptionの文字列
+'
+Public Function ErrDescFmNum(ErrNum As Long) As String
+    On Error Resume Next
+    Err.Raise ErrNum
+    ErrDescFmNum = Err.Description
+    Err.Clear
+End Function
+
+
+' 2次元配列を行方向で昇順QuickSort(StrComp版)
+' Arr　: ソートする２次元配列（行方向にソート, 基底不問）
+' CPos : ソート基準となる列のインデックス（0始まり）
+' low  : ソート開始の行インデックス
+' high : ソート終了の行インデックス
+' 注：配列内の要素はVariant型
+'     比較はStrCompを使用（大文字小文字の区別なし）
+'     要素にNullがあるとエラーになる可能性あり
+'
+Public Sub SortSQuickRowAsc2D(ByRef arr As Variant, _
+        CPos As Long, ByVal low As Long, ByVal high As Long)
+
+    Dim pivot As Variant
+    Dim temp As Variant
+    Dim i As Long, j As Long, k As Long
+
+    i = low
+    j = high
+    pivot = arr((i + j) \ 2, CPos)
+
+    Do While i <= j
+        Do While StrComp(arr(i, CPos), pivot, vbBinaryCompare) < 0
+            i = i + 1
+        Loop
+        Do While StrComp(arr(j, CPos), pivot, vbBinaryCompare) > 0
+            j = j - 1
+        Loop
+        If i <= j Then
+            For k = LBound(arr, 2) To UBound(arr, 2)
+                temp = arr(i, k)
+                arr(i, k) = arr(j, k)
+                arr(j, k) = temp
+            Next k
+            i = i + 1
+            j = j - 1
+        End If
+    Loop
+
+    If low < j Then SortSQuickRowAsc2D arr, CPos, low, j
+    If i < high Then SortSQuickRowAsc2D arr, CPos, i, high
+End Sub
+
+' 2次元配列を行方向で降順QuickSort(StrComp版)
+' Arr　: ソートする２次元配列（行方向にソート, 基底不問）
+' CPos : ソート基準となる列のインデックス（0始まり）
+' low  : ソート開始の行インデックス
+' high : ソート終了の行インデックス
+' 注：配列内の要素はVariant型
+'     比較はStrCompを使用（大文字小文字の区別なし）
+'     要素にNullがあるとエラーになる可能性あり
+'
+Public Sub SortSQuickRowDes2D(ByRef arr As Variant, _
+        CPos As Long, ByVal low As Long, ByVal high As Long)
+
+    Dim pivot As Variant
+    Dim temp As Variant
+    Dim i As Long, j As Long, k As Long
+
+    i = low
+    j = high
+    pivot = arr((i + j) \ 2, CPos)
+
+    Do While i <= j
+        Do While StrComp(arr(i, CPos), pivot, vbBinaryCompare) > 0
+            i = i + 1
+        Loop
+        Do While StrComp(arr(j, CPos), pivot, vbBinaryCompare) < 0
+            j = j - 1
+        Loop
+        If i <= j Then
+            For k = LBound(arr, 2) To UBound(arr, 2)
+                temp = arr(i, k)
+                arr(i, k) = arr(j, k)
+                arr(j, k) = temp
+            Next k
+            i = i + 1
+            j = j - 1
+        End If
+    Loop
+
+    If low < j Then SortSQuickRowDes2D arr, CPos, low, j
+    If i < high Then SortSQuickRowDes2D arr, CPos, i, high
+End Sub
+
+' 2次元配列を列方向で昇順QuickSort(StrComp版)
+' Arr　: ソートする２次元配列（列方向にソート, 基底不問）
+' CPos : ソート基準となる行のインデックス（0始まり）
+' low  : ソート開始の列インデックス
+' high : ソート終了の列インデックス
+' 注：配列内の要素はVariant型
+'     比較はStrCompを使用（大文字小文字の区別なし）
+'     要素にNullがあるとエラーになる可能性あり
+'
+Public Sub SortSQuickColAsc2D(ByRef arr As Variant, _
+        RPos As Long, ByVal low As Long, ByVal high As Long)
+
+    Dim pivot As Variant
+    Dim temp As Variant
+    Dim i As Long, j As Long, k As Long
+
+    i = low
+    j = high
+    pivot = arr(RPos, (i + j) \ 2)
+
+    Do While i <= j
+        Do While StrComp(arr(RPos, i), pivot, vbBinaryCompare) < 0
+            i = i + 1
+        Loop
+        Do While StrComp(arr(RPos, j), pivot, vbBinaryCompare) > 0
+            j = j - 1
+        Loop
+        If i <= j Then
+            For k = LBound(arr, 1) To UBound(arr, 1)
+                temp = arr(k, i)
+                arr(k, i) = arr(k, j)
+                arr(k, j) = temp
+            Next k
+            i = i + 1
+            j = j - 1
+        End If
+    Loop
+
+    If low < j Then SortSQuickColAsc2D arr, RPos, low, j
+    If i < high Then SortSQuickColAsc2D arr, RPos, i, high
+End Sub
+
+' 2次元配列を列方向で降順QuickSort(StrComp版)
+' Arr　: ソートする２次元配列（列方向にソート, 基底不問）
+' CPos : ソート基準となる行のインデックス（0始まり）
+' low  : ソート開始の列インデックス
+' high : ソート終了の列インデックス
+' 注：配列内の要素はVariant型
+'     比較はStrCompを使用（大文字小文字の区別なし）
+'     要素にNullがあるとエラーになる可能性あり
+'
+Public Sub SortSQuickColDes2D(ByRef arr As Variant, _
+        RPos As Long, ByVal low As Long, ByVal high As Long)
+
+    Dim pivot As Variant
+    Dim temp As Variant
+    Dim i As Long, j As Long, k As Long
+
+    i = low
+    j = high
+    pivot = arr(RPos, (i + j) \ 2)
+
+    Do While i <= j
+        Do While StrComp(arr(RPos, i), pivot, vbBinaryCompare) > 0
+            i = i + 1
+        Loop
+        Do While StrComp(arr(RPos, j), pivot, vbBinaryCompare) < 0
+            j = j - 1
+        Loop
+        If i <= j Then
+            For k = LBound(arr, 1) To UBound(arr, 1)
+                temp = arr(k, i)
+                arr(k, i) = arr(k, j)
+                arr(k, j) = temp
+            Next k
+            i = i + 1
+            j = j - 1
+        End If
+    Loop
+
+    If low < j Then SortSQuickColDes2D arr, RPos, low, j
+    If i < high Then SortSQuickColDes2D arr, RPos, i, high
+End Sub
