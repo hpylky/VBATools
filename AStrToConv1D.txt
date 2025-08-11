@@ -1,1 +1,385 @@
+<Perplexty>
+' モジュールレベル変数
+Dim m_TargetPID As Long
+Dim m_FoundhWnd As Long
 
+' API宣言
+Declare Function EnumWindows Lib "user32" (ByVal lpEnumFunc As Long, ByVal lParam As Long) As Long
+Declare Function GetWindowThreadProcessId Lib "user32" (ByVal hWnd As Long, lpdwProcessId As Long) As Long
+Declare Function IsWindowVisible Lib "user32" (ByVal hWnd As Long) As Long
+Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+
+' コールバック関数
+Function EnumWindowsProc(ByVal hWnd As Long, ByVal lParam As Long) As Long
+    Dim pid As Long
+    GetWindowThreadProcessId hWnd, pid
+    If pid = m_TargetPID Then
+        If IsWindowVisible(hWnd) Then  ' 表示されているウインドウのみ取得
+            m_FoundhWnd = hWnd
+            EnumWindowsProc = 0 ' 停止
+            Exit Function
+        End If
+    End If
+    EnumWindowsProc = 1 ' 続行
+End Function
+
+' メイン関数
+Public Function hWndGetFromPID(PID As Long) As Long
+    Dim StartTime As Single
+    Dim Timeout As Single: Timeout = 30 ' 秒
+    m_TargetPID = PID
+    m_FoundhWnd = 0
+    StartTime = Timer
+    Do
+        EnumWindows AddressOf EnumWindowsProc, 0
+        If m_FoundhWnd <> 0 Then
+            hWndGetFromPID = m_FoundhWnd
+            Exit Function
+        End If
+        Sleep 1000 ' 1秒待つ
+    Loop While Timer - StartTime < Timeout
+    hWndGetFromPID = 0
+End Function
+
+<Gemini>
+' Windows APIの宣言
+#If VBA7 Then
+    Private Declare PtrSafe Function EnumWindows Lib "user32" (ByVal lpEnumFunc As LongPtr, ByVal lParam As LongPtr) As Long
+    Private Declare PtrSafe Function GetWindowThreadProcessId Lib "user32" (ByVal hWnd As LongPtr, lpdwProcessId As Long) As Long
+    Private Declare PtrSafe Function GetTickCount Lib "kernel32" () As Long
+#Else
+    Private Declare Function EnumWindows Lib "user32" (ByVal lpEnumFunc As Long, ByVal lParam As Long) As Long
+    Private Declare Function GetWindowThreadProcessId Lib "user32" (ByVal hWnd As Long, lpdwProcessId As Long) As Long
+    Private Declare Function GetTickCount Lib "kernel32" () As Long
+#End If
+
+' コールバック関数で使用する共有変数
+Private g_TargetPID As Long
+Private g_FoundhWnd As LongPtr ' 64bit環境を考慮しLongPtrを使用
+
+' EnumWindowsのコールバック関数
+#If VBA7 Then
+Private Function EnumWindowsProc(ByVal hWnd As LongPtr, ByVal lParam As LongPtr) As Boolean
+#Else
+Private Function EnumWindowsProc(ByVal hWnd As Long, ByVal lParam As Long) As Boolean
+#End If
+    Dim currentPID As Long
+
+    ' ウィンドウのプロセスIDを取得
+    Call GetWindowThreadProcessId(hWnd, currentPID)
+
+    ' ターゲットのPIDと一致するか確認
+    If currentPID = g_TargetPID Then
+        g_FoundhWnd = hWnd ' 見つかったウィンドウハンドルを保存
+        EnumWindowsProc = False ' 列挙を停止
+    Else
+        EnumWindowsProc = True ' 列挙を続行
+    End If
+End Function
+
+' アプリ起動時のプロセスID(PID)からウインドウハンドル(hWnd)を取得
+' PID    : プロセスID
+' 戻り値 : ウインドウハンドル
+'          = 0 タイムアウトエラー or 見つからず
+'          <> 0 正常終了
+' 補足 :
+' ・Shell関数でアプリ起動時に戻り値としてPIDが帰ってくるが、
+'   それを元にhWndを取得
+' ・ウインドウハンドルが見つからない場合は、1秒待って再度検索
+' 　を行う。30秒経過しても見つからない場合は0を返して終了。
+'
+Public Function hWndGetFromPID(PID As Long) As LongPtr ' 戻り値もLongPtrに修正
+
+    Const MAX_WAIT_TIME_MS As Long = 30 * 1000 ' 30秒 (ミリ秒)
+    Const RETRY_INTERVAL_MS As Long = 1 * 1000  ' 1秒 (ミリ秒)
+
+    Dim startTime As Long
+    Dim currentTime As Long
+    Dim result_hWnd As LongPtr ' 最終的な戻り値
+
+    ' グローバル変数を初期化
+    g_TargetPID = PID
+    g_FoundhWnd = 0
+
+    ' タイムアウト計測開始
+    startTime = GetTickCount()
+
+    Do
+        ' EnumWindows関数を呼び出し、コールバック関数でウィンドウを検索
+        ' EnumWindowsProcの戻り値がFalseになると列挙が停止
+        Call EnumWindows(AddressOf EnumWindowsProc, 0)
+
+        ' ウィンドウハンドルが見つかったか確認
+        If g_FoundhWnd <> 0 Then
+            result_hWnd = g_FoundhWnd
+            Exit Do ' 見つかったのでループを終了
+        End If
+
+        ' タイムアウトしたか確認
+        currentTime = GetTickCount()
+        If currentTime - startTime > MAX_WAIT_TIME_MS Then
+            result_hWnd = 0 ' タイムアウト
+            Exit Do
+        End If
+
+        ' 1秒待機
+        Call Sleep(RETRY_INTERVAL_MS) ' Sleep関数を使用する場合は別途宣言が必要
+
+    Loop While True ' 見つかるかタイムアウトするまでループ
+
+    hWndGetFromPID = result_hWnd
+
+End Function
+
+' Sleep関数の宣言 (待ち時間のために必要)
+#If VBA7 Then
+    Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#Else
+    Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#End If
+
+Sub Test_hWndGetFromPID()
+    Dim appPath As String
+    Dim pid As Long
+    Dim hWnd As LongPtr ' 戻り値がLongPtrなのでこちらもLongPtrで宣言
+
+    ' 例: メモ帳を起動
+    appPath = "notepad.exe"
+
+    On Error Resume Next
+    ' Shell関数でアプリを起動し、PIDを取得
+    pid = Shell(appPath, vbNormalFocus)
+    On Error GoTo 0
+
+    If pid <> 0 Then
+        Debug.Print "アプリケーションを起動しました。PID: " & pid
+
+        ' PIDからhWndを取得
+        hWnd = hWndGetFromPID(pid)
+
+        If hWnd <> 0 Then
+            Debug.Print "ウィンドウハンドルを取得しました: " & hWnd
+            ' ここで取得したhWndを使って、さらにウィンドウを操作できます
+            ' 例: AppActivate hWnd ' 取得したウィンドウをアクティブにする
+        Else
+            Debug.Print "指定されたPIDのウィンドウハンドルは見つかりませんでした (タイムアウト)。"
+        End If
+    Else
+        Debug.Print "アプリケーションの起動に失敗しました。"
+    End If
+End Sub
+
+<ChatGPT>
+#If VBA7 Then
+    Private Declare PtrSafe Function EnumWindows Lib "user32" (ByVal lpEnumFunc As LongPtr, ByVal lParam As LongPtr) As Long
+    Private Declare PtrSafe Function GetWindowThreadProcessId Lib "user32" (ByVal hWnd As LongPtr, lpdwProcessId As Long) As Long
+    Private Declare PtrSafe Function IsWindowVisible Lib "user32" (ByVal hWnd As LongPtr) As Long
+    Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#Else
+    Private Declare Function EnumWindows Lib "user32" (ByVal lpEnumFunc As Long, ByVal lParam As Long) As Long
+    Private Declare Function GetWindowThreadProcessId Lib "user32" (ByVal hWnd As Long, lpdwProcessId As Long) As Long
+    Private Declare Function IsWindowVisible Lib "user32" (ByVal hWnd As Long) As Long
+    Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#End If
+
+Private hWndResult As LongPtr
+Private targetPID As Long
+
+' コールバック関数
+Private Function EnumWindowsProc(ByVal hWnd As LongPtr, ByVal lParam As LongPtr) As Long
+    Dim winPID As Long
+    GetWindowThreadProcessId hWnd, winPID
+    If winPID = targetPID And IsWindowVisible(hWnd) Then
+        hWndResult = hWnd
+        EnumWindowsProc = 0 ' 0で列挙終了
+    Else
+        EnumWindowsProc = 1 ' 1で次のウィンドウへ
+    End If
+End Function
+
+' メイン関数
+Public Function hWndGetFromPID(PID As Long) As Long
+    Dim i As Long
+    targetPID = PID
+    hWndResult = 0
+
+    For i = 1 To 30 ' 最大30回（=30秒）
+        EnumWindows(AddressOf EnumWindowsProc, 0)
+        If hWndResult <> 0 Then
+            hWndGetFromPID = hWndResult
+            Exit Function
+        End If
+        Sleep 1000 ' 1秒待機
+    Next i
+
+    hWndGetFromPID = 0 ' タイムアウト or 見つからず
+End Function
+
+<Claude>
+<artifact_identifier>vba-hwnd-from-pid</artifact_identifier>
+<artifact_type>application/vnd.ant.code</artifact_type>
+<artifact_language>vba</artifact_language>
+<artifact_title>PIDからウィンドウハンドルを取得するVBA関数</artifact_title>
+<artifact_content>' Windows API宣言
+Private Declare PtrSafe Function EnumWindows Lib "user32" (ByVal lpEnumFunc As LongPtr, ByVal lParam As LongPtr) As Long
+Private Declare PtrSafe Function GetWindowThreadProcessId Lib "user32" (ByVal hwnd As LongPtr, lpdwProcessId As Long) As Long
+Private Declare PtrSafe Function IsWindowVisible Lib "user32" (ByVal hwnd As LongPtr) As Long
+
+' グローバル変数（EnumWindowsProc内で使用）
+Private g_TargetPID As Long
+Private g_FoundHWnd As LongPtr
+
+' アプリ起動時のプロセスID(PID)からウインドウハンドル(hWnd)を取得
+' PID : プロセスID
+' 戻り値 : ウインドウハンドル
+' = 0 タイムアウトエラー or 見つからず
+' <> 0 正常終了
+' 補足 :
+' ・Shell関数でアプリ起動時に戻り値としてPIDが帰ってくるが、
+' それを元にhWndを取得
+' ・ウインドウハンドルが見つからない場合は、1秒待って再度検索
+' 　を行う。30秒経過しても見つからない場合は0を返して終了。
+'
+Public Function hWndGetFromPID(PID As Long) As Long
+Dim startTime As Double
+Dim currentTime As Double
+Const TIMEOUT_SECONDS As Long = 30
+
+copy
+' 開始時刻を記録
+startTime = Timer
+
+' タイムアウトまでループ
+Do
+    ' グローバル変数を初期化
+    g_TargetPID = PID
+    g_FoundHWnd = 0
+    
+    ' 全てのウィンドウを列挙してプロセスIDをチェック
+    EnumWindows AddressOf EnumWindowsProc, 0
+    
+    ' ウィンドウハンドルが見つかった場合は終了
+    If g_FoundHWnd <> 0 Then
+        hWndGetFromPID = g_FoundHWnd
+        Exit Function
+    End If
+    
+    ' 1秒待機
+    Application.Wait DateAdd("s", 1, Now)
+    
+    ' 経過時間をチェック
+    currentTime = Timer
+    If currentTime < startTime Then
+        ' 日付が変わった場合の処理（午前0時をまたいだ場合）
+        currentTime = currentTime + 86400 ' 24時間を秒で加算
+    End If
+    
+Loop While (currentTime - startTime) < TIMEOUT_SECONDS
+
+' タイムアウトした場合は0を返す
+hWndGetFromPID = 0
+End Function
+
+' EnumWindows のコールバック関数
+Private Function EnumWindowsProc(ByVal hwnd As LongPtr, ByVal lParam As LongPtr) As Long
+Dim windowPID As Long
+
+copy
+' ウィンドウが可視かどうかをチェック
+If IsWindowVisible(hwnd) Then
+    ' ウィンドウのプロセスIDを取得
+    GetWindowThreadProcessId hwnd, windowPID
+    
+    ' 目的のプロセスIDと一致するかチェック
+    If windowPID = g_TargetPID Then
+        g_FoundHWnd = hwnd
+        EnumWindowsProc = 0 ' 列挙を停止
+        Exit Function
+    End If
+End If
+
+EnumWindowsProc = 1 ' 列挙を継続
+End Function</artifact_content>
+</artifact_artifact>
+
+テストコード
+Dim pid As Long
+Dim hwnd As Long
+
+' アプリケーションを起動
+pid = Shell("notepad.exe", vbNormalFocus)
+
+' PIDからウィンドウハンドルを取得
+hwnd = hWndGetFromPID(pid)
+
+If hwnd <> 0 Then
+    Debug.Print "ウィンドウハンドル取得成功: " & hwnd
+Else
+    Debug.Print "ウィンドウハンドル取得失敗"
+End If
+
+<Llama>
+Public Function hWndGetFromPID(PID As Long) As Long
+    Const TIMEOUT_SEC As Long = 30 ' 30秒まで待つ
+    Dim hWnd As Long
+    Dim startTime As Single
+    Dim elapsedTime As Single
+    
+    startTime = Timer
+    Do
+        ' 1秒待って再度検索
+        DoEvents
+        Application.Wait (Now + TimeValue("0:00:1"))
+        hWnd = FindWindowEx(0&, 0&, "", PID)
+        If hWnd <> 0 Then
+            ' ウインドウハンドルが見つかったので、すぐに終了
+            Exit Do
+        End If
+    Loop While Timer - startTime < TIMEOUT_SEC
+    
+    ' ウインドウハンドルが見つからなかったら0を返す
+    hWndGetFromPID = 0
+End Function
+
+<Copilot>
+Private Declare PtrSafe Function EnumWindows Lib "user32" _
+    (ByVal lpEnumFunc As LongPtr, ByVal lParam As LongPtr) As Long
+
+Private Declare PtrSafe Function GetWindowThreadProcessId Lib "user32" _
+    (ByVal hWnd As LongPtr, lpdwProcessId As Long) As Long
+
+Private Declare PtrSafe Function IsWindowVisible Lib "user32" _
+    (ByVal hWnd As LongPtr) As Long
+
+Private hWndResult As LongPtr
+
+Private Function EnumWindowsProc(ByVal hWnd As LongPtr, ByVal lParam As LongPtr) As Long
+    Dim pidTest As Long
+    GetWindowThreadProcessId hWnd, pidTest
+    If pidTest = lParam Then
+        If IsWindowVisible(hWnd) Then
+            hWndResult = hWnd
+            EnumWindowsProc = 0 ' stop enumeration
+            Exit Function
+        End If
+    End If
+    EnumWindowsProc = 1 ' continue enumeration
+End Function
+
+Public Function hWndGetFromPID(PID As Long) As Long
+    Dim startTime As Single
+    startTime = Timer
+
+    Do While Timer - startTime < 30
+        hWndResult = 0
+        EnumWindows AddressOf EnumWindowsProc, PID
+        If hWndResult <> 0 Then
+            hWndGetFromPID = hWndResult
+            Exit Function
+        End If
+        DoEvents
+        Application.Wait Now + TimeValue("0:00:01")
+    Loop
+
+    hWndGetFromPID = 0 ' Timeout or not found
+End Function
